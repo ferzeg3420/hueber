@@ -1,0 +1,265 @@
+#! /bin/sh
+
+EXERCISE_LINKS="$(mktemp)"
+REVERSED_EXERCISE_LINKS="$(mktemp)"
+WEIGHTED_EXERCISE_LINKS=$(mktemp)
+NUM_WEIGHTED_LINKS=0
+
+get_num_exercise_links() {
+    wc -l "$EXERCISE_LINKS" | grep -o "[0-9][0-9]*" | head -1
+}
+
+create_reversed_execise_links() {
+    awk '{a[i++]=$0}END{for(j=i-1;j>=0;j--)print a[j];}' \
+        "$EXERCISE_LINKS" > "$REVERSED_EXERCISE_LINKS"
+}
+
+create_weighted_exercise_links() {
+    NUM_WEIGHTED_LINKS=0 
+    NUM_EXERCISE_LINKS="$(get_num_exercise_links)"
+    NUM_REPEATS=$(echo "${NUM_EXERCISE_LINKS} / 6 + 1" | bc)
+    create_reversed_execise_links
+
+    J=0
+    exec 3<"$REVERSED_EXERCISE_LINKS"
+    while read -r LINE <&3
+    do
+        I="$NUM_REPEATS"
+        while test "$I" -gt 0
+        do
+            echo "$LINE" >> "$WEIGHTED_EXERCISE_LINKS"
+            NUM_WEIGHTED_LINKS="$((NUM_WEIGHTED_LINKS + 1))"
+            I="$((I - 1))"
+        done
+        IS_NEXT_MODULE="$(echo "${J} % 6" | bc)"
+        test "$J" -ne 0 && test "$IS_NEXT_MODULE" -eq 0 && \
+            NUM_REPEATS="$((NUM_REPEATS - 1))"
+        J="$((J + 1))"
+    done
+    exec 3<&-
+}
+
+get_random_recent_weighted_line() {
+    create_weighted_exercise_links
+    RANDOM_LINE="$(awk -v "max=$NUM_WEIGHTED_LINKS" \
+        'BEGIN{srand(); print (int(rand()*max)+1) }')" 
+    head -"$RANDOM_LINE" "$WEIGHTED_EXERCISE_LINKS" | tail -1
+}
+
+filter_only_module_from_exercise_list() {
+    NEW_EXERCISE_LIST=$(mktemp)
+    LEVEL_TO_KEEP="$1"
+    START_LESSON_NUMBER="$2"
+    END_LESSON_NUMBER="$3"
+
+    exec 4<"$EXERCISE_LINKS"
+    while read -r LINE <&4
+    do
+        MODULE_DATA="$(echo "$LINE" | awk -F'|' '{print $1}')"
+        LEVEL="$(echo "$MODULE_DATA" | awk -F'.' '{print $1}')"
+        LESSON_NUMBER="$(echo "$MODULE_DATA" | awk -F'.' '{print $2}')"
+        if test "$LEVEL" = "$LEVEL_TO_KEEP" \
+            && test "$LESSON_NUMBER" -le "$END_LESSON_NUMBER" \
+            && test "$LESSON_NUMBER" -ge "$START_LESSON_NUMBER"
+        then
+            echo "$LINE" >> "$NEW_EXERCISE_LIST" 
+        fi
+    done
+    exec 4<&-
+    mv "$NEW_EXERCISE_LIST" "$EXERCISE_LINKS"
+}
+
+select_module() {
+    RETVAL="$(mktemp)"
+    dialog  --no-cancel \
+            --clear \
+            --menu "Choose the module range: " 0 0 0 \
+            "a" \
+                "A1.1  through A1.6" \
+            "b" \
+                "A1.7  through A1.12" \
+            "c" \
+                "A1.13 through A1.18" \
+            "d"  \
+                "A1.19 through A1.24" \
+            "e"  \
+                "A2.1  through A2.6" \
+            "f"  \
+                "A2.7  through A2.12" \
+            "g"  \
+                "A2.13 through A2.18" \
+            "h"  \
+                "A2.19 through A2.24" \
+            "i"  \
+                "B1.1  through B1.6" \
+            "j"  \
+                "B1.7  through B1.12" \
+            "Quit" "" 2>"$RETVAL"
+    
+    clear
+    SELECTION="$(cat "$RETVAL" | head -1)"
+    
+    case "$SELECTION" in
+        a)
+            filter_only_module_from_exercise_list "A1" "1" "6"
+            ;;
+        b)
+            filter_only_module_from_exercise_list "A1" "1" "6"
+            ;;
+        c)
+            filter_only_module_from_exercise_list "A1" "13" "18"
+            ;;
+        d)
+            filter_only_module_from_exercise_list "A1" "19" "24"
+            ;;
+        e)
+            filter_only_module_from_exercise_list "A2" "1" "6"
+            ;;
+        f)
+            filter_only_module_from_exercise_list "A2" "7" "12"
+            ;;
+        g)
+            filter_only_module_from_exercise_list "A2" "13" "18"
+            ;;
+        h)
+            filter_only_module_from_exercise_list "A2" "19" "24"
+            ;;
+        i)
+            filter_only_module_from_exercise_list "B1" "1" "6"
+            ;;
+        j)
+            filter_only_module_from_exercise_list "B1" "7" "12"
+            ;;
+        Quit)
+            exit 0
+            ;;
+        *)
+            exit 1
+            ;;
+    esac
+}
+
+get_random_lesson() {
+    if test "$1" = "recent" || test "$2"  = "recent"
+    then
+        get_random_recent_weighted_line
+        return
+    fi
+    sort -R "$EXERCISE_LINKS" | head -1
+}
+
+cat <<FIN >"$EXERCISE_LINKS"
+A1.1|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163913be65b0b25|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164c6e712e60af6|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163913d3aa40b3c|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163913e39cf0b40
+A1.2|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a636622e0e77|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164ea9354d712b8|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a636dfde0e7a|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63782ff0e7d
+A1.3|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63816890e80|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eabfcb56133b|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63882150e83|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a6391e270e87
+A1.4|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a639aaf80e8a|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eac3c9951352|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63a115b0e8d|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63a8e070e90
+A1.5|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63b39a20e94|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eac86bea1378|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63b9c4c0ed3|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63c2cd20ed6
+A1.6|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63c9f150ed9|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eacb081a1387|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63d2cb90edd|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63da2400ee0
+A1.7|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a63e3a0d0ee3|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eaccc4441393|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64425ed0ee7|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a6447fe50eea
+A1.8|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a644f6670eed|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164eacfba7513a3|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a6457a450ef1|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a645d1c10ef4
+A1.9|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64648730ef7|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164ead1bd6313b6|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a646a5a80efa|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64700800efd
+A1.10|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a6478fa30f00|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164ead2f69313c1|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a647dbcf0f03|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64850fc0f06
+A1.11|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a648b5480f0e|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164ead63e6e13e1|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64904e40f17|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64973180f1a
+A1.12|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a649d8bc0f1d|https://www.hueber.de/exercises/530-25226/?rootPath=/exercises/530-25226/#/content/2c9f850d649b7c510164ead7986b13eb|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64a27ca0f20|https://www.hueber.de/exercises/530-25918/?rootPath=/exercises/530-25918/#/content/2c9f850d63570b6a0163a64abe510f24
+A1.13|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b95f04c07b8|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec920166530930780d09|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9a4e6907dc|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9d9a930801
+A1.14|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b970ce407bb|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec9201665320c1140d6f|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9a733107dd|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9dab980802
+A1.15|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b972b6107bc|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec920166532c9b860db2|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9a8aa807de|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9dc24d0803
+A1.16|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b973f3107bd|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec920166532f4edc0dbf|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9a9f3507df|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9dd7650804
+A1.17|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b974f3107be|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec920166533a74360dd2|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9ab37707e0|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9df22c0805
+A1.18|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9766a607bf|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec920166533e623c0ddf|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9acc9907e1|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e086c0806
+A1.19|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9775fc07c0|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec9201665345210c0df2|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9adf4107e2|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e1ed60807
+A1.20|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b97928607c1|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec92016653d1cb250e4b|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9af4b807e3|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e30660808
+A1.21|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b97a3e407c2|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec92016653d8266f0e5d|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9b0a0e07e4|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e4b500809
+A1.22|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b97b47b07c3|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec92016653e22d410e73|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9b1f8107e5|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e5eb2080a
+A1.23|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b97c92507c4|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec92016653efa9300ebd|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9b345b07e6|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e723d080b
+A1.24|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b97e08c07c5|https://www.hueber.de/exercises/530-25236/?rootPath=/exercises/530-25236/#/content/2c9f850d65dfec92016653f51fe80ece|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9b434007e7|https://www.hueber.de/exercises/530-25941/?rootPath=/exercises/530-25941/#/content/2c9f850d66701e2d01668b9e9004080c
+A2.1|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8a29d6d07f1|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692eb6f26608f8|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c52b3507fe|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c5da450801
+A2.2|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c7d3d50810|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ec0f8040914|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c831f10813|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c89b310816
+A2.3|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8c9b4c10823|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ec8d89a0946|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8ca1cc20826|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8ca85c80829
+A2.4|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8cc32d20835|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692edcbc3b0962|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8ccae110838|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8cd395a083c
+A2.5|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8cdd324083f|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ee134a50971|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8cece8d084b|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8cf2f9a084e
+A2.6|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d069f8085a|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ee873fe098c|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d0d3ea085d|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d15fff0860
+A2.7|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d3f7e8086c|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692eeb6d130997|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d44b2d086f|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d4be480872
+A2.8|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d5e4bd087e|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ef17d3009aa|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d63b59089f|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8d6a04808a2
+A2.9|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8dc7ad208b2|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692ef89d8209c4|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8dcd18008b5|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8dd34b208b8
+A2.10|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8de57bd08c4|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692efa339709c9|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8deadba08c7|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8df2e9b08cb
+A2.11|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e0637708d7|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692f012ad309e6|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e0ca2108da|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e124f408dd
+A2.12|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e2526408e9|https://www.hueber.de/exercises/530-25243/?rootPath=/exercises/530-25243/#/content/2c9f850d68f936ba01692f04edda09f6|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e2b6b608ec|https://www.hueber.de/exercises/530-25948/?rootPath=/exercises/530-25948/#/content/2c9f850d6acda304016af8e3224908ef
+A2.13|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/70a7401900ed-4672-b9be-c43ac0425972|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b64ed84290129|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/65cbdb8d2a4b-488f-9533-1027e9901db1|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/ff433f1598eb-4abf-a731-0e526f1ad74a
+A2.14|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/b4bd1c25c396-4a80-a178-d658ec406d19|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b64f9eb030152|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/f32d01bec6ad-4079-bf04-e016401b949a|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/261e989e776c-4beb-9f0f-a6bff2705df5
+A2.15|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/f471cf6c71c4-495a-b601-494ac0944faa|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b64fccc77015c|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/6c426fde0cee-4cf4-8f02-0bea9f872133|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/f7ff943e0b3d-420e-abfb-36481d1799c7
+A2.16|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/98f2fac699f6-46a1-bf92-43014d8a5880|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b65015bc10168|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/e4d1bceb520a-4ddd-a6ac-b928f418ca48|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/eebb49aba8db-40e3-ad17-07c0799a8672
+A2.17|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/a31e87032d46-4677-a4bf-f5bf5988321e|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b64e959830122|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/9cb5102ba592-4db4-9696-8b1cec4da48f|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/00af7de7f9d1-4329-985c-3e407d42a5e8
+A2.18|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/4b195a6a21f4-4204-aefb-722c1f7c3dec|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b650d75d50190|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/224c835dd340-4e38-95e2-4dbb339523b5|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/c12992e94bf3-4830-a2a5-a9b2e54f64ac
+A2.19|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/be01f281127b-4b95-8ada-f267e9469888|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b650f8f200199|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/8f4b433b3a83-4b50-a109-a336e6036a3b|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/4146bb0d6001-4eec-a404-31e23d236eb7
+A2.20|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/3c866b908b1a-47ff-b343-5a26b6b36a5b|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b6519d02101b0|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/a82f65d2e277-4994-9865-366afde9b101|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/42932932ca23-4a30-809f-c34316e3c286
+A2.21|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/63240adb9675-4b63-8b9e-2d62bc5ae459|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b651e63a001b9|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/b17335b8c051-479e-9578-b5ccbec0c777|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/53a12576b7b0-4920-b4a0-ca604519c92b
+A2.22|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/343645f99501-451c-a3ef-9f74dbdc70f3|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b6522baac01c6|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/7e0568a1f320-4ad5-a847-0c1a99995357|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/f400188e87ce-4adf-91c3-6a31e0404481
+A2.23|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/f47d53f32bd9-4ea9-b8c2-4ac88ba8ee65|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b6526c89701d4|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/2e4ba6feec85-467c-b42a-e6d8e7b3e684|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/9a2ce713e37c-4fee-9098-8a283c02e8d2
+A2.24|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/1a7fc895320a-4333-ac54-a308236357b4|https://www.hueber.de/exercises/530-25248/?rootPath=/exercises/530-25248/#/content/2c9f850d6b5dd4ef016b652b0e5701e3|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/623359a73b13-4660-8db9-fca836e9161f|https://www.hueber.de/exercises/530-25963/?rootPath=/exercises/530-25963/#/content/ef812f84a255-4aa7-a11c-7df9e5144f11
+B1.1|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/1f6bf61faf57-429a-ae78-d2fb52743df7|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3e95941100ac|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/0f6fbc452b51-47a0-a611-d4e59c986438|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/3a8de3710f9b-4250-a2fe-30fbbca286d0
+B1.2|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/4a961cd87542-4e42-a3b6-dcf16c73b6f5|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3e9fa45e00ba|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/ba0beb01c03e-4a69-801f-d2e7e80a1bd0|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/53098cf62d12-4687-8090-94a3a8ae0f63
+B1.3|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/a2242670c5eb-4ad3-aebd-b68744b9b8fb|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ea7e95b00bc|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/1744e904296d-4851-aab1-74cd384da7f2|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/3ec91a644b85-473e-97e3-06bbe3420408
+B1.4|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/1291f15c10e1-4199-9494-fa6e0abeabb9|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3eaadde300c4|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/1fc880aa2d69-446a-b806-c8ea9039c2c7|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/9d3ef7622ed2-4905-ae44-870f4c47945a
+B1.5|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/c78098650628-426b-9517-89d1ec957f6b|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3eaeed0300cb|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/f58eda9950f4-4387-8c51-9194a42b8296|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/26d6334e5473-40b4-a4dd-37096436a91b
+B1.6|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/c48b3ddd80f4-4f49-8431-d7a6cf87e76d|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3eb126f300d3|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/be431d8703c8-4df1-b46e-446db9abcdd1|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/a18a50925ec6-4e17-a654-8ee16c3499c3
+B1.7|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/2ca4fc8512f5-4703-8b16-89d3304bef70|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3eb90d250107|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/f0f62309e385-4b96-b2d5-c85582c08a19|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/f10ed9705fa0-4ca8-822a-3597d11fada5
+B1.8|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/efeeb6afcc29-4873-9ea4-75d9452db203|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ebc753a0118|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/15eeb5f69f6d-4ad4-bb38-83e4535edb43|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/f669c176bfc0-4bf8-8506-20f394cbca4d
+B1.9|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/800d825d7fa1-45fe-8269-3095fdf536fc|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ec1e97e0129|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/aed443c8ea19-4f28-8d24-7465d63aff7c|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/29169606bbf4-4757-ace6-472aa7e6a68d
+B1.10|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/ede6e138c2a4-459d-8da1-fec7ec1755e0|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ec7aed20135|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/ae8bad0cb8fa-49bd-a369-159bafe1602a|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/22e5a771f997-434c-ad9b-74f956f5ace9
+B1.11|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/28d30dd1ba61-4dd6-9282-1d8239471176|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ed5cea20146|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/21e3f5385330-4075-b9a0-bdc084067709|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/ec5d62dc9288-4b17-8172-e2f11134e7da
+B1.12|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/ae0057c89bda-42fa-9e6f-9a6de718b08d|https://www.hueber.de/exercises/530-25252/?rootPath=/exercises/530-25252/#/content/2c9f850d6d32b99d016d3ed93bcb0154|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/5229c84a0da2-47e6-95bf-4e8e0f95714a|https://www.hueber.de/exercises/530-25976/?rootPath=/exercises/530-25976/#/content/34a95132fe11-4194-868e-249789a69fd4
+FIN
+
+if test "$1" = "module" || test "$2" = "module"
+then
+    select_module        
+fi
+
+RANDOM_LESSON_DATA="$(get_random_lesson "$1" "$2")"
+
+LESSON_NAME="$(echo "$RANDOM_LESSON_DATA" | awk -F'|' '{print $1}')"
+ARBEITSBUCH_LINK="$(echo "$RANDOM_LESSON_DATA" | awk -F'|' '{print $2}')"
+KURSBUCH_LINK="$(echo "$RANDOM_LESSON_DATA" | awk -F'|' '{print $3}')"
+GRAMMATIK_LINK="$(echo "$RANDOM_LESSON_DATA" | awk -F'|' '{print $4}')"
+KOMMUNICATION_LINK="$(echo "$RANDOM_LESSON_DATA" | awk -F'|' '{print $5}')"
+
+if test -n "$1" && test ! "$1" = "short"
+then
+    if ! test "$1" = "recent" && ! test "$1" = "module"
+    then
+        echo "usage: hueber [short|recent|module] [recent|module]"
+        exit 1
+    fi
+fi
+
+echo "Lektion: $LESSON_NAME"
+
+if test -n "$1" && test "$1" = "short"
+then
+    RANDOM_PICK="$(pickExercise)"
+    RANDOM_PICK_BOOK="$(echo "$RANDOM_PICK" | awk -F':' '{print $1}')"
+    RANDOM_PICK_EXERCISE="$(echo "$RANDOM_PICK" | awk -F':' '{print $2}')"
+    echo "$RANDOM_PICK"
+    echo "$RANDOM_PICK" | say -v 'Anna'
+    if test "$RANDOM_PICK_BOOK" = "Kursbuch"
+    then
+        open -a /Applications/Google\ Chrome.app "$KURSBUCH_LINK"
+        exit 0
+    fi
+
+    if test "$RANDOM_PICK_EXERCISE" = " Grammatik"
+    then
+        open -a /Applications/Google\ Chrome.app "$GRAMMATIK_LINK"
+        exit 0
+    elif test "$RANDOM_PICK_EXERCISE" = " Kommunication"
+    then
+        open -a /Applications/Google\ Chrome.app "$KOMMUNICATION_LINK"
+        exit 0
+    fi
+    open -a /Applications/Google\ Chrome.app "$ARBEITSBUCH_LINK"
+    exit 0
+fi
+
+open -a /Applications/Google\ Chrome.app "$ARBEITSBUCH_LINK"
+open -a /Applications/Google\ Chrome.app "$KURSBUCH_LINK"
